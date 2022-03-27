@@ -228,6 +228,20 @@ def main():
     for (i, j), block in zip(block_indices, blocks):
         A[i*MAX_BLOCK_SIZE:(i+1)*MAX_BLOCK_SIZE, j*MAX_BLOCK_SIZE:(j+1)*MAX_BLOCK_SIZE] = block
 
+    for j in range(1, N):
+        block = np.random.rand(MAX_BLOCK_SIZE, MAX_BLOCK_SIZE)
+        blocks.append(block)
+        block_indices.append((0, j))
+        A[0:MAX_BLOCK_SIZE, j*MAX_BLOCK_SIZE:(j+1)*MAX_BLOCK_SIZE] = block
+
+    for i in range(1, N):
+        block = np.random.rand(MAX_BLOCK_SIZE, MAX_BLOCK_SIZE)
+        blocks.append(block)
+        block_indices.append((i, 0))
+        A[i*MAX_BLOCK_SIZE:(i+1)*MAX_BLOCK_SIZE, 0:MAX_BLOCK_SIZE] = block
+
+
+
 
     I = SparseMatrix(shape, block_indices, blocks)
     #I = Matrix(np.random.rand(484, 643))
