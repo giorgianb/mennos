@@ -220,9 +220,10 @@ class SparseMatrix:
 def main():
     print("[Initializing]")
     # This is our "input" to the neural network
-    blocks = [np.random.rand(MAX_BLOCK_SIZE, MAX_BLOCK_SIZE) for i in range(10)]
-    block_indices = [(i, i) for i in range(10)]
-    shape = (MAX_BLOCK_SIZE * 10, MAX_BLOCK_SIZE * 10)
+    N = 50
+    blocks = [np.random.rand(MAX_BLOCK_SIZE, MAX_BLOCK_SIZE) for i in range(N)]
+    block_indices = [(i, i) for i in range(N)]
+    shape = (MAX_BLOCK_SIZE * N, MAX_BLOCK_SIZE * N)
     A = np.zeros(shape)
     for (i, j), block in zip(block_indices, blocks):
         A[i*MAX_BLOCK_SIZE:(i+1)*MAX_BLOCK_SIZE, j*MAX_BLOCK_SIZE:(j+1)*MAX_BLOCK_SIZE] = block
