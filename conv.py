@@ -41,10 +41,7 @@ class Convolve2D:
         return Convolve2D(self, h)
 
     def get_partial_block(self, i, j, x, y):
-        """Returns block (i, j) assuring that block[:x+1, :y+1] is valid"""
-        global CHECK
-        if CHECK:
-            print(f'[id={self.id} get_partial_block(i={i}, j={j}, x={x}, y={y})]')
+        """Returns block (i, j) ensuring that block[:x+1, :y+1] is valid"""
         def compute_size(i, j):
             nrows = (self.I.shape[0] - self.h.shape[0] + 1) % MAX_BLOCK_SIZE
             nrows = nrows if nrows != 0 else MAX_BLOCK_SIZE
@@ -67,8 +64,8 @@ class Convolve2D:
         vl, vh = c[h.shape[0] - 1:c.shape[0] - (h.shape[0] - 1), h.shape[1] - 1:c.shape[1] - (h.shape[1] - 1)].shape
 
         accumulator += c[h.shape[0] - 1:h.shape[0] - 1 + nrows, h.shape[1] - 1:h.shape[1] - 1 + ncolumns]
-        xp = x + h.shape[0] - MAX_BLOCK_SIZE if x is not None else MAX_BLOCK_SIZE - 1
-        yp = y + h.shape[1] - MAX_BLOCK_SIZE if y is not None else MAX_BLOCK_SIZE - 1
+        xp = x + h.shape[0] - MAX_BLOCK_SIZE
+        yp = y + h.shape[1] - MAX_BLOCK_SIZE
 
 
         # Check if the row dependencies are satisfied
@@ -77,22 +74,12 @@ class Convolve2D:
             b = I.get_partial_block(i + 1, j, x=xp, y=y)
             c = convolve2d(b, h, mode='full', fillvalue=0)
             l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-            if CHECK:
-                bp = I.slow_get_block(i + 1, j)
-                cp = convolve2d(bp, h, mode='full', fillvalue=0)
-                assert np.allclose(c[:l - 1, w-1:w - 1 + ncolumns], cp[:l - 1, w-1:w - 1 + ncolumns])
             accumulator[vl:, :] += c[:l - 1, w-1:w - 1 + ncolumns]
 
         if y + h.shape[1] >= MAX_BLOCK_SIZE and j + 1 < I.blocked_shape[1]:
             b = I.get_partial_block(i, j + 1, x=x, y=yp)
             c = convolve2d(b, h, mode='full', fillvalue=0)
             l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-            if CHECK:
-                bp = I.slow_get_block(i, j + 1)
-                cp = convolve2d(bp, h, mode='full', fillvalue=0)
-                diff = np.abs(c[l- 1:l - 1 + nrows, :w - 1] - cp[l- 1:l - 1 + nrows, :w - 1]) <= 1e-3
-                assert np.allclose(c[l- 1:l - 1 + nrows, :w - 1], cp[l- 1:l - 1 + nrows, :w - 1]), f"Error: [id={self.id} get_partial_block(i={i}, j={j}, x={x}, y={y})] (right)"
-
 
             accumulator[:, vh:] += c[l- 1:l - 1 + nrows, :w - 1]
 
@@ -103,72 +90,14 @@ class Convolve2D:
             b = I.get_partial_block(i + 1, j + 1, x=xp, y=yp)
             c = convolve2d(b, h, mode='full', fillvalue=0)
             l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-            if CHECK:
-                bp = I.slow_get_block(i + 1, j + 1)
-                cp = convolve2d(bp, h, mode='full', fillvalue=0)
-                assert np.allclose(c[:l - 1, :w- 1], cp[:l - 1, :w- 1])
 
             accumulator[vl:, vh:] += c[:l - 1, :w- 1]
 
         return accumulator
-
-    def slow_get_block(self, i, j):
-        """Get the (i, j)-th block. We use a constant amount of intermediate memory and a lot of recomputation"""
-        def compute_size(i, j):
-            nrows = (self.I.shape[0] - self.h.shape[0] + 1) % MAX_BLOCK_SIZE
-            nrows = nrows if nrows != 0 else MAX_BLOCK_SIZE
-            ncolumns = (self.I.shape[1] - self.h.shape[1] + 1) % MAX_BLOCK_SIZE
-            ncolumns = ncolumns if ncolumns != 0 else MAX_BLOCK_SIZE
-            nrows = nrows if i == self.blocked_shape[0] - 1 else MAX_BLOCK_SIZE
-            ncolumns = ncolumns if j == self.blocked_shape[1] - 1 else MAX_BLOCK_SIZE
-            return (nrows, ncolumns)
-
-        if (i, j) in self.computed:
-            self.recompute_count += 1
-
-        I, h = self.I, self.h
-        self.computed.add((i, j))
-
-        nrows, ncolumns = compute_size(i, j)
-        accumulator = np.zeros((nrows, ncolumns))
-        # TODO: possibly also make this a partial block?
-        b = I.slow_get_block(i, j)
-        c = convolve2d(b, h, mode='full')
-        vl, vh = c[h.shape[0] - 1:c.shape[0] - (h.shape[0] - 1), h.shape[1] - 1:c.shape[1] - (h.shape[1] - 1)].shape
-
-        accumulator += c[h.shape[0] - 1:h.shape[0] - 1 + nrows, h.shape[1] - 1:h.shape[1] - 1 + ncolumns]
-
-        if i + 1 < I.blocked_shape[0]:
-            b = I.slow_get_block(i + 1, j)
-            c = convolve2d(b, h, mode='full', fillvalue=0)
-            l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-
-            accumulator[vl:, :] += c[:l - 1, w-1:w - 1 + ncolumns]
-
-        if j + 1 < I.blocked_shape[1]:
-            b = I.slow_get_block(i, j + 1)
-            c = convolve2d(b, h, mode='full', fillvalue=0)
-            l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-
-            accumulator[:, vh:] += c[l- 1:l - 1 + nrows, :w - 1]
-
-        if i + 1 < I.blocked_shape[0] and j + 1 < I.blocked_shape[1]:
-            b = I.slow_get_block(i + 1, j + 1)
-            c = convolve2d(b, h, mode='full', fillvalue=0)
-            l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-
-            accumulator[vl:, vh:] += c[:l - 1, :w- 1]
-
-        return accumulator
-    
-
 
 
     def get_block(self, i, j):
         """Get the (i, j)-th block. We use a constant amount of intermediate memory and a lot of recomputation"""
-        global CHECK
-        if CHECK:
-            print(f'[id={self.id} get_block(i={i}, j={j})]')
         def compute_size(i, j):
             nrows = (self.I.shape[0] - self.h.shape[0] + 1) % MAX_BLOCK_SIZE
             nrows = nrows if nrows != 0 else MAX_BLOCK_SIZE
@@ -197,10 +126,6 @@ class Convolve2D:
             b = I.get_partial_block(i + 1, j, x=h.shape[0] - 1, y=MAX_BLOCK_SIZE - 1)
             c = convolve2d(b, h, mode='full', fillvalue=0)
             l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-            if CHECK:
-                bp = I.slow_get_block(i + 1, j)
-                cp = convolve2d(bp, h, mode='full', fillvalue=0)
-                assert np.allclose(c[:l - 1, w-1:w - 1 + ncolumns], cp[:l - 1, w-1:w - 1 + ncolumns])
 
             accumulator[vl:, :] += c[:l - 1, w-1:w - 1 + ncolumns]
 
@@ -208,10 +133,6 @@ class Convolve2D:
             b = I.get_partial_block(i, j + 1, x=MAX_BLOCK_SIZE - 1, y=h.shape[1] - 1)
             c = convolve2d(b, h, mode='full', fillvalue=0)
             l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-            if CHECK:
-                bp = I.slow_get_block(i, j + 1)
-                cp = convolve2d(bp, h, mode='full', fillvalue=0)
-                assert np.allclose(c[l- 1:l - 1 + nrows, :w - 1], cp[l- 1:l - 1 + nrows, :w - 1])
 
             accumulator[:, vh:] += c[l- 1:l - 1 + nrows, :w - 1]
 
@@ -219,10 +140,6 @@ class Convolve2D:
             b = I.get_partial_block(i + 1, j + 1, x=h.shape[0] - 1, y=h.shape[1] - 1)
             c = convolve2d(b, h, mode='full', fillvalue=0)
             l, w = min(h.shape[0], b.shape[0] + 1), min(h.shape[1], b.shape[1] + 1)
-            if CHECK:
-                bp = I.slow_get_block(i + 1, j + 1)
-                cp = convolve2d(bp, h, mode='full', fillvalue=0)
-                assert np.allclose(c[:l - 1, :w- 1], cp[:l - 1, :w- 1])
 
             accumulator[vl:, vh:] += c[:l - 1, :w- 1]
 
@@ -241,24 +158,14 @@ class Matrix:
         return Convolve2D(self, h)
 
     def get_partial_block(self, i, j, x=None, y=None):
-        """Get the (i, j)-th block. The 'real' implementation would load this from disc into memory"""
-        if CHECK:
-            print(f'[id={self.id} get_partial_block(i={i}, j={j}, x={x}, y={y})]')
+        """Get the (i, j)-th block, ensuring that block[:x+1, :y+1] is valid.. The 'real' implementation would load this from disc into memory."""
         n, m = self.A.shape
         return self.A[i*MAX_BLOCK_SIZE:(i+1)*MAX_BLOCK_SIZE,j*MAX_BLOCK_SIZE:(j+1)*MAX_BLOCK_SIZE]
 
     def get_block(self, i, j):
-        """Get the (i, j)-th block. The 'real' implementation would load this from disc into memory"""
-        if CHECK:
-            print(f'[id={self.id} get_block(i={i}, j={j})]')
+        """Get the (i, j)-th block. The 'real' implementation would load this from disc into memory. """
         n, m = self.A.shape
         return self.A[i*MAX_BLOCK_SIZE:(i+1)*MAX_BLOCK_SIZE,j*MAX_BLOCK_SIZE:(j+1)*MAX_BLOCK_SIZE]
-
-    def slow_get_block(self, i, j):
-        """Get the (i, j)-th block. The 'real' implementation would load this from disc into memory"""
-        n, m = self.A.shape
-        return self.A[i*MAX_BLOCK_SIZE:(i+1)*MAX_BLOCK_SIZE,j*MAX_BLOCK_SIZE:(j+1)*MAX_BLOCK_SIZE]
-
 
     @property
     def shape(self):
@@ -283,7 +190,7 @@ def main():
     h1 = np.random.rand(4, 5) # id=1 when debugging
     h2 = np.random.rand(3, 4) # id=2 when debugging
     h3 = np.random.rand(6, 6) # id=3 when debugging
-    h4 = np.random.rand(12, 12) # id=4
+    h4 = np.random.rand(8, 3) # id=4
     b1 = I @ h1 # Result after first convolution layer (nothing is actually computed)
     b2 = b1 @ h2 # Result after second convolution layer (nothing is actually computed)
     b3 = b2 @ h3 # Result after third convolution layer (nothing is actually computed)
@@ -303,7 +210,6 @@ def main():
             # Now is when computation is actually done
             computed_block = b4.get_block(i, j)
             true_block = c4.get_block(i, j)
-            diff = np.abs(true_block, computed_block) <= 1e-4
             assert np.allclose(computed_block, true_block), f"(b4) block {(i, j)} does not match"
 
 
