@@ -2,6 +2,7 @@ import numpy as np
 import math
 from scipy.signal import convolve2d
 from icecream import ic
+from conv import Matrix
 
 def ceil(x):
     return int(math.ceil(x))
@@ -222,6 +223,9 @@ def main():
     blocks = [np.random.rand(MAX_BLOCK_SIZE, MAX_BLOCK_SIZE) for i in range(10)]
     block_indices = [(i, i) for i in range(10)]
     shape = (MAX_BLOCK_SIZE * 10, MAX_BLOCK_SIZE * 10)
+    A = np.zeros(shape)
+    for (i, j), block in zip(block_indices, blocks):
+        A[i*MAX_BLOCK_SIZE:(i+1)*MAX_BLOCK_SIZE, j*MAX_BLOCK_SIZE:(j+1)*MAX_BLOCK_SIZE] = block
 
 
     I = SparseMatrix(shape, block_indices, blocks)
@@ -239,10 +243,10 @@ def main():
     b3 = b2 @ h3 # Result after third convolution layer (nothing is actually computed)
     b4 = b3 @ h4 # Result after fourth convolution layer (nothing is actually computed)
 
-    #c1 = Matrix(convolve2d(I.A, h1, mode='valid'))
-    #c2 = Matrix(convolve2d(c1.A, h2, mode='valid'))
-    #c3 = Matrix(convolve2d(c2.A, h3, mode='valid'))
-    #c4 = Matrix(convolve2d(c3.A, h4, mode='valid'))
+    c1 = Matrix(convolve2d(A, h1, mode='valid'))
+    c2 = Matrix(convolve2d(c1.A, h2, mode='valid'))
+    c3 = Matrix(convolve2d(c2.A, h3, mode='valid'))
+    c4 = Matrix(convolve2d(c3.A, h4, mode='valid'))
 
 
     print("[Testing]")
@@ -251,9 +255,9 @@ def main():
             # Compare the final result of the convolution
             # with the true result
             # Now is when computation is actually done
-            computed_block = b4.get_block(i, j)
-            #true_block = c4.get_block(i, j)
-            #assert np.allclose(computed_block, true_block), f"(b4) block {(i, j)} does not match"
+            computed_block, _ = b4.get_block(i, j)
+            true_block = c4.get_block(i, j)
+            assert np.allclose(computed_block, true_block), f"(b4) block {(i, j)} does not match"
 
 
     print(f"Total recomputation done (b1): {b1.recompute_count}")
