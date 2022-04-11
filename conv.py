@@ -11,7 +11,7 @@ def ceil(x):
 # the largest convolution kernel
 # Our code is coded with this assumption: otherwise, additional measures
 # need to be taken to generate the correct result
-MAX_BLOCK_SIZE = 26
+MAX_BLOCK_SIZE = 9
 CHECK = False
 
 class Convolve2D:

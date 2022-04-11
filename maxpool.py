@@ -2,6 +2,8 @@ import numpy as np
 import math
 from icecream import ic
 from skimage.measure import block_reduce
+from conv import Convolve2D
+from scipy.signal import convolve2d
 
 def ceil(x):
     return int(math.ceil(x))
@@ -19,6 +21,7 @@ class MaxPool2D:
         assert kernel_size[0] < MAX_BLOCK_SIZE, "Kernel height must be less than MAX_BLOCK_SIZE"
         assert kernel_size[1] < MAX_BLOCK_SIZE, "Kernel width must be less than MAX_BLOCK_SIZE"
         self.I = I
+        self.id = I.id + 1
         self.kernel_size = kernel_size
         self._shape = (ceil(I.shape[0]/kernel_size[0]), ceil(I.shape[1]/kernel_size[0]))
         self._blocked_shape = ceil(self._shape[0]/MAX_BLOCK_SIZE), ceil(self._shape[1]/MAX_BLOCK_SIZE)
@@ -37,7 +40,7 @@ class MaxPool2D:
         return self._blocked_shape
 
     def __matmul__(self, h):
-        return MaxPool2D(self, h)
+        return Convolve2D(self, h)
 
     def get_partial_block(self, i, j, x, y):
         """Returns block (i, j) ensuring that block[:x+1, :y+1] is valid"""
@@ -125,6 +128,10 @@ class MaxPool2D:
 
     def get_block(self, i, j):
         """Get the (i, j)-th block. We use a constant amount of intermediate memory and a lot of recomputation"""
+        if (i, j) in self.computed:
+            self.recompute_count += 1
+
+
         return self.get_partial_block(i, j, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE)
     
 class Matrix:
@@ -137,7 +144,7 @@ class Matrix:
         return self.A.__getitem__(*idx)
 
     def __matmul__(self, h):
-        return MaxPool2D(self, h)
+        return Convolve2D(self, h)
 
     def get_partial_block(self, i, j, x=None, y=None):
         """Get the (i, j)-th block, ensuring that block[:x+1, :y+1] is valid.. The 'real' implementation would load this from disc into memory."""
@@ -167,22 +174,39 @@ def main():
     KSIZE = (5, 5)
     SIZE = 128
     I = Matrix(np.arange(SIZE**2).reshape(SIZE, SIZE))
-    b1 = I @ KSIZE
-    b2 = b1 @ KSIZE
-    b3 = b2 @ KSIZE
-    tb1 = Matrix(block_reduce(I.A, KSIZE, np.max))
+    h1 = np.arange(4*5).reshape(4, 5)
+    h2 = np.arange(3*4).reshape(3, 4)
+    b1 = I @ h1
+    b2 = MaxPool2D(b1, KSIZE)
+    b3 = b2 @ h2
+    b4 = MaxPool2D(b3, KSIZE)
+
+    tb1 = Matrix(convolve2d(I.A, h1, mode='valid'))
     tb2 = Matrix(block_reduce(tb1.A, KSIZE, np.max))
-    tb3 = Matrix(block_reduce(tb2.A, KSIZE, np.max))
+    tb3 = Matrix(convolve2d(tb2.A, h2, mode='valid'))
+    tb4 = Matrix(block_reduce(tb3.A, KSIZE, np.max))
 
     print("[Testing]")
-    for i in range(b3.blocked_shape[0]):
-        for j in range(b3.blocked_shape[1]):
+    for i in range(b4.blocked_shape[0]):
+        for j in range(b4.blocked_shape[1]):
             # Compare the final result of the convolution
             # with the true result
             # Now is when computation is actually done
-            computed_block = b3.get_block(i, j)
-            true_block = tb3.get_block(i, j)
+            computed_block = b4.get_block(i, j)
+            true_block = tb4.get_block(i, j)
             assert np.allclose(computed_block, true_block), f"(mp) block {(i, j)} does not match"
+    print(f"b1.shape: {tb1.A.shape}")
+    print(f"b2.shape: {tb2.A.shape}")
+    print(f"b3.shape: {tb3.A.shape}")
+    print(f"b4.shape: {tb4.A.shape}")
+    print(f"Total recomputation done (b1): {b1.recompute_count}")
+    print(f"Partial recomputation done (b1): {b1.partial_recompute_count}")
+    print(f"Total recomputation done (b2): {b2.recompute_count}")
+    print(f"Partial recomputation done (b2): {b2.partial_recompute_count}")
+    print(f"Total recomputation done (b3): {b3.recompute_count}")
+    print(f"Partial recomputation done (b3): {b3.partial_recompute_count}")
+    print(f"Total recomputation done (b4): {b4.recompute_count}")
+    print(f"Partial recomputation done (b4): {b4.partial_recompute_count}")
 
 
 
