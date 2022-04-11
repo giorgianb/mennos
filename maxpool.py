@@ -73,42 +73,68 @@ class MaxPool2D:
                 print(f"[Column {dj}]")
                 b = I.get_partial_block(i*ksize[0] + di, j*ksize[1] + dj, x=x, y=y)
                 ic(b)
-                if prepend_column is not None:
-                    ic(prepend_column)
-                    b = np.concatenate((prepend_column, b), axis=-1)
 
                 n_rows = b.shape[0]
                 if prepend_rows[dj] is not None:
                     ic(prepend_rows[dj])
                     b = np.concatenate((prepend_rows[dj], b), axis=0)
 
+                max_x = ksize[0] * (b.shape[0] // ksize[0])
+                next_prepend_rows.append(b[max_x:, :])
+                # Keep only "good" portion
+                b = b[:max_x+1, :]
+
+                if prepend_column is not None:
+                    ic(prepend_column)
+                    b = np.concatenate((prepend_column, b), axis=-1)
+
+
                 bp = b
                 ic(bp)
                 c = block_reduce(b, ksize, np.max)
                 dx = b.shape[0] // ksize[0]
                 dy = b.shape[1] // ksize[1]
-                max_x = ksize[0] * (b.shape[0] // ksize[0])
                 max_y = ksize[1] * (b.shape[1] // ksize[1])
                 accumulator[cx:cx+dx, cy:cy+dy] = c[:dx, :dy]
                 prepend_column = b[:n_rows, max_y:]
-                next_prepend_rows.append(b[max_x:, :])
+                ic(n_rows)
                 cy += dy
 
             # Take care of leftover prepend column
             if prepend_column is not None and prepend_column.shape[1] != 0:
                 ic(prepend_column)
                 c = block_reduce(prepend_column, ksize, np.max)
-                dx = c.shape[0]
-                accumulator[cx:cx+dx, -1] = block_reduce(b, ksize, np.max).squeeze(-1)
+                dxx = c.shape[0]
+                accumulator[cx:cx+dxx, -1] = c.squeeze(-1)
 
-            cx += dy
+            cx += dx
             prepend_rows = next_prepend_rows
 
-        for prepend_row in prepend_rows:
-            if prepend_row is not None and prepend_row.shape[0] != 0:
-                c = block_reduce(prepend_row, ksize, np.max)
-                cy = c.shape[1]
-                accumulator[-1, cy:cy+dy] = c.squeeze(0)
+        cy = 0
+        prepend_column = None
+        print("[Finalizing]")
+        for b in prepend_rows:
+            if b is not None and b.shape[0] != 0:
+                ic(b)
+                if prepend_column is not None:
+                    ic(prepend_column)
+                    b = np.concatenate((prepend_column, b), axis=-1)
+
+                bp = b
+                ic(bp)
+                max_y = ksize[1] * (b.shape[1] // ksize[1])
+                c = block_reduce(b, ksize, np.max)
+                dy = b.shape[1] // ksize[1]
+                ic(c)
+                ic(dy)
+                accumulator[-1, cy:cy+dy] = c[:, :dy].squeeze(0)
+                prepend_column = b[:, max_y:]
+                ic(accumulator[-1, :])
+                cy += dy
+
+        if prepend_column is not None and prepend_column.shape[1] != 0:
+            accumulator[-1, -1] = np.max(prepend_column)
+
 
         return accumulator
 
@@ -154,10 +180,12 @@ def main():
     print("[Initializing]")
     # This is our "input" to the neural network
     np.set_printoptions(edgeitems=30, linewidth=100000)
-    I = Matrix(np.arange(16*16).reshape(16, 16))
-    cmp = I @ (2, 2)
+    KSIZE = (3, 3)
+    SIZE = 8
+    I = Matrix(np.arange(SIZE**2).reshape(SIZE, SIZE))
+    cmp = I @ KSIZE
     ic(I.A)
-    tmp = Matrix(block_reduce(I.A, (2, 2), np.max))
+    tmp = Matrix(block_reduce(I.A, KSIZE, np.max))
     ic(tmp.A)
 
 
