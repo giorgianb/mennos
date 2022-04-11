@@ -11,7 +11,7 @@ def ceil(x):
 # the largest convolution kernel
 # Our code is coded with this assumption: otherwise, additional measures
 # need to be taken to generate the correct result
-MAX_BLOCK_SIZE = 4
+MAX_BLOCK_SIZE = 9
 CHECK = False
 
 class MaxPool2D:
@@ -21,9 +21,7 @@ class MaxPool2D:
         self.I = I
         self.kernel_size = kernel_size
         self._shape = (ceil(I.shape[0]/kernel_size[0]), ceil(I.shape[1]/kernel_size[0]))
-        ic(self._shape)
         self._blocked_shape = ceil(self._shape[0]/MAX_BLOCK_SIZE), ceil(self._shape[1]/MAX_BLOCK_SIZE)
-        ic(self._blocked_shape)
         self.computed = set()
         self.recompute_count = 0
         self.partially_computed = set()
@@ -65,44 +63,37 @@ class MaxPool2D:
         max_dj = min(ksize[1], I.blocked_shape[1] - j*ksize[1])
         prepend_rows = [None] * max_dj
         for di in range(max_di):
-            print(f"[Row {di}]")
             cy = 0
             prepend_column = None
             next_prepend_rows = []
             for dj in range(max_dj):
-                print(f"[Column {dj}]")
                 b = I.get_partial_block(i*ksize[0] + di, j*ksize[1] + dj, x=x, y=y)
-                ic(b)
 
                 n_rows = b.shape[0]
                 if prepend_rows[dj] is not None:
-                    ic(prepend_rows[dj])
                     b = np.concatenate((prepend_rows[dj], b), axis=0)
 
                 max_x = ksize[0] * (b.shape[0] // ksize[0])
                 next_prepend_rows.append(b[max_x:, :])
                 # Keep only "good" portion
-                b = b[:max_x+1, :]
+                #b = b[:max_x+1, :]
+                b = b[:max_x, :]
 
                 if prepend_column is not None:
-                    ic(prepend_column)
                     b = np.concatenate((prepend_column, b), axis=-1)
 
 
                 bp = b
-                ic(bp)
                 c = block_reduce(b, ksize, np.max)
                 dx = b.shape[0] // ksize[0]
                 dy = b.shape[1] // ksize[1]
                 max_y = ksize[1] * (b.shape[1] // ksize[1])
                 accumulator[cx:cx+dx, cy:cy+dy] = c[:dx, :dy]
-                prepend_column = b[:n_rows, max_y:]
-                ic(n_rows)
+                prepend_column = b[:max_x, max_y:]
                 cy += dy
 
             # Take care of leftover prepend column
             if prepend_column is not None and prepend_column.shape[1] != 0:
-                ic(prepend_column)
                 c = block_reduce(prepend_column, ksize, np.max)
                 dxx = c.shape[0]
                 accumulator[cx:cx+dxx, -1] = c.squeeze(-1)
@@ -112,24 +103,17 @@ class MaxPool2D:
 
         cy = 0
         prepend_column = None
-        print("[Finalizing]")
         for b in prepend_rows:
             if b is not None and b.shape[0] != 0:
-                ic(b)
                 if prepend_column is not None:
-                    ic(prepend_column)
                     b = np.concatenate((prepend_column, b), axis=-1)
 
                 bp = b
-                ic(bp)
                 max_y = ksize[1] * (b.shape[1] // ksize[1])
                 c = block_reduce(b, ksize, np.max)
                 dy = b.shape[1] // ksize[1]
-                ic(c)
-                ic(dy)
                 accumulator[-1, cy:cy+dy] = c[:, :dy].squeeze(0)
                 prepend_column = b[:, max_y:]
-                ic(accumulator[-1, :])
                 cy += dy
 
         if prepend_column is not None and prepend_column.shape[1] != 0:
@@ -180,13 +164,11 @@ def main():
     print("[Initializing]")
     # This is our "input" to the neural network
     np.set_printoptions(edgeitems=30, linewidth=100000)
-    KSIZE = (3, 3)
-    SIZE = 8
+    KSIZE = (5, 5)
+    SIZE = 32
     I = Matrix(np.arange(SIZE**2).reshape(SIZE, SIZE))
     cmp = I @ KSIZE
-    ic(I.A)
     tmp = Matrix(block_reduce(I.A, KSIZE, np.max))
-    ic(tmp.A)
 
 
     print("[Testing]")
@@ -196,9 +178,7 @@ def main():
             # with the true result
             # Now is when computation is actually done
             computed_block = cmp.get_block(i, j)
-            ic(computed_block)
             true_block = tmp.get_block(i, j)
-            ic(true_block)
             assert np.allclose(computed_block, true_block), f"(mp) block {(i, j)} does not match"
 
 
