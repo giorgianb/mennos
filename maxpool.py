@@ -45,7 +45,7 @@ class MaxPool2D:
         assert 0 <= j < self._blocked_shape[1]
         def compute_size(i, j):
             nrows = MAX_BLOCK_SIZE if i < self.blocked_shape[0] - 1 else self._shape[0] % MAX_BLOCK_SIZE
-            ncolumns = MAX_BLOCK_SIZE if i < self.blocked_shape[1] - 1 else self._shape[1] % MAX_BLOCK_SIZE
+            ncolumns = MAX_BLOCK_SIZE if j < self.blocked_shape[1] - 1 else self._shape[1] % MAX_BLOCK_SIZE
             nrows = MAX_BLOCK_SIZE if nrows == 0 else nrows
             ncolumns = MAX_BLOCK_SIZE if ncolumns == 0 else ncolumns
             return (nrows, ncolumns)
@@ -165,20 +165,23 @@ def main():
     # This is our "input" to the neural network
     np.set_printoptions(edgeitems=30, linewidth=100000)
     KSIZE = (5, 5)
-    SIZE = 32
+    SIZE = 128
     I = Matrix(np.arange(SIZE**2).reshape(SIZE, SIZE))
-    cmp = I @ KSIZE
-    tmp = Matrix(block_reduce(I.A, KSIZE, np.max))
-
+    b1 = I @ KSIZE
+    b2 = b1 @ KSIZE
+    b3 = b2 @ KSIZE
+    tb1 = Matrix(block_reduce(I.A, KSIZE, np.max))
+    tb2 = Matrix(block_reduce(tb1.A, KSIZE, np.max))
+    tb3 = Matrix(block_reduce(tb2.A, KSIZE, np.max))
 
     print("[Testing]")
-    for i in range(cmp.blocked_shape[0]):
-        for j in range(cmp.blocked_shape[1]):
+    for i in range(b3.blocked_shape[0]):
+        for j in range(b3.blocked_shape[1]):
             # Compare the final result of the convolution
             # with the true result
             # Now is when computation is actually done
-            computed_block = cmp.get_block(i, j)
-            true_block = tmp.get_block(i, j)
+            computed_block = b3.get_block(i, j)
+            true_block = tb3.get_block(i, j)
             assert np.allclose(computed_block, true_block), f"(mp) block {(i, j)} does not match"
 
 
