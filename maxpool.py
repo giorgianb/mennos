@@ -130,6 +130,7 @@ class MaxPool2D:
         """Get the (i, j)-th block. We use a constant amount of intermediate memory and a lot of recomputation"""
         if (i, j) in self.computed:
             self.recompute_count += 1
+        self.computed.add((i, j))
 
 
         return self.get_partial_block(i, j, MAX_BLOCK_SIZE, MAX_BLOCK_SIZE)
@@ -171,8 +172,8 @@ def main():
     print("[Initializing]")
     # This is our "input" to the neural network
     np.set_printoptions(edgeitems=30, linewidth=100000)
-    KSIZE = (5, 5)
-    SIZE = 128
+    KSIZE = (3, 3)
+    SIZE = 1243
     I = Matrix(np.arange(SIZE**2).reshape(SIZE, SIZE))
     h1 = np.arange(4*5).reshape(4, 5)
     h2 = np.arange(3*4).reshape(3, 4)
